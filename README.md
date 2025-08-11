@@ -11,6 +11,7 @@ You are fine, as long you have these in your system:
 
 # Installation
 Simply place "cogfetch" somewhere within reach of your environment variable "PATH".
+
 Example:
 ```
 $ mv ./cogfetch /usr/local/bin/
@@ -45,6 +46,7 @@ $ echo > ~/.cogfetch
 - **COLOR_VALUE** - ANSI color that will be used when printing value. Default: '0'.
 ### "Gathers" 
 Gathers are functions that can be used by "cogfetch" to gather and output specific information. Every gather supposed to start with "get_" and use function "log" to output result.
+
 Example:
 ```
 # First define gather somewhere in your configuration file
@@ -80,20 +82,24 @@ get_colonthree()
 ```
 
 # Usage
-Simply run "cogfetch" to show information gathered by gathers you provided as arguments, or by defining variable "DEFAULT_GATHERS":
-### Without arguments
+Simply run "cogfetch" either with or without arguments to display information.
+### Without arguments 
 ```
 $ cogfetch
 ```
-### Using arguments 
+This way you will display information gathered by gathers which were specified in the variable "DEFAULT_GATHERS"
+### With arguments
 ```
-$ cogfetch host uptime os kernel
+$ cogfetch host uptime kernel os
 ```
-However, this way you will overwrite variable "DEFAULT_GATHERS". If this behavior is unwanted then add "+" to append already existing variable:
+This way you will display information gathered by gathers you input. However this also ovewrites variable "DEFAULT_GATHERS". If behavior is unwanted then add "+" to your line like here:
 ```
-$ cogfetch kernel uptime +
+$ cogfetch host uptime kernel os +
+```
+or here:
+```
+$ cogfetch + host uptime kernel os
 ```
 *(Order doesn't matter)*
-```
-$ cogfetch + kernel uptime
-```
+
+This way you will display information gathered by gathers specified in variable "DEFAULT_GATHERS" and by gathers you input.
