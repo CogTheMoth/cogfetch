@@ -5,6 +5,7 @@
 ## Config ##
 [ -r /etc/cogfetch ] && source /etc/cogfetch # System config
 [ -r ~/.cogfetch ] && source ~/.cogfetch; # User config
+# Defaulting some variables
 [ "$DEFAULT_GATHERS" ] || DEFAULT_GATHERS='host uptime os kernel pkgs mounts mem bat colors'
 [ "$PKG_MANAGERS" ] || PKG_MANAGERS=()
 [ "$ART" ] || ART=()
@@ -63,7 +64,10 @@ get_pkgs()
 		cmd=${PKG_MANAGERS[j+1]}
 		opts=${PKG_MANAGERS[j+2]}
 
-		[ $(which $cmd) ] && log "Pkgs ($label)" "$($cmd $opts | wc -l)"
+		# Checking if $cmd exists then calling before counting the list; othwerise message user that $cmd is not found
+		result=$(if [[ $(command -v "$cmd") ]]; then "$($cmd $opts | wc -l)"; else echo "Command '$cmd' is not found"; fi)
+
+		log "Pkgs ($label)" "$result"
 	done
 }
 get_colors()
@@ -111,26 +115,30 @@ get_mem()
 }
 get_bat()
 { 
-	for bat in $(find /sys/class/power_supply/BAT*); do
+	for bat in /sys/class/power_supply/BAT*; do
 		# Getting battery's capacity and its status (Discharging or Charging)
-		capacity=$(cat ${bat}/capacity)
-		status=$(cat ${bat}/status)
+		capacity=$(cat "${bat}/capacity")
+		status=$(cat "${bat}/status")
 
-		log "Battery ($(basename $bat))" "${capacity}% ($status)"
+		log "Battery ($(basename "$bat"))" "${capacity}% ($status)"
 	done
 }
 
 ## Main ##
 # Preparing $to_gather while checking options with the most awful method possible
-to_gather=$DEFAULT_GATHERS; new_gathers=''; append=0
-for v in ${@:1}; do
-	if [ $v == '+' ]; then
+to_gather="$DEFAULT_GATHERS"; new_gathers=''; append=0
+for v in "${@:1}"; do
+	if [[ $v == '+' ]]; then
 		append=1
 	else 
 		new_gathers+=" $v"
 	fi
 done
-(( $append )) && to_gather+=" $new_gathers" || if (( ${#new_gathers} > 0 )); then to_gather=$new_gathers; fi
+if (( append )); then 
+	to_gather+=" $new_gathers"
+else
+	if (( ${#new_gathers} > 0 )); then to_gather="$new_gathers"; fi
+fi
 
 # Measuring the art
 artp_n=${#ART[@]}; art_width=0
@@ -152,15 +160,19 @@ log()
 
 # Calling gathers
 for gather in $to_gather; do
-	[ $(declare -F "get_${gather}") ] && get_${gather} || echo "Gather '$v' is not defined."
+	if [[ $(declare -F "get_${gather}") ]]; then 
+		"get_${gather}" || echo "Gather '$gather' encountered some issue. Error code: $?"
+	else
+		echo "Gather '$gather' is not defined."
+	fi
 done
 
 # Preparing spacings
-init_spacing=$(util_makespaces $SPACE_FROM_START)
-art_spacing=$( (( artp_n > 0 )) && util_makespaces $SPACE_FROM_ART && echo )
-artend_spacing=$(util_makespaces $art_width)
-key_spacing=$(util_makespaces $SPACE_FROM_KEY)
-delimiter_spacing=$( (( ${#DELIMITER_CHAR} > 0 )) && util_makespaces $SPACE_FROM_DELIMITER)
+init_spacing=$(util_makespaces "$SPACE_FROM_START")
+art_spacing=$( (( artp_n > 0 )) && util_makespaces "$SPACE_FROM_ART" && echo )
+artend_spacing=$(util_makespaces "$art_width")
+key_spacing=$(util_makespaces "$SPACE_FROM_KEY")
+delimiter_spacing=$( (( ${#DELIMITER_CHAR} > 0 )) && util_makespaces "$SPACE_FROM_DELIMITER")
 
 # Outputing $logs
 log_i=0; artp_i=0
