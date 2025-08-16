@@ -152,7 +152,7 @@ log()
 
 # Calling gathers
 for gather in $to_gather; do
-	[ $(declare -F "get_${gather}") ] && get_${gather} || echo "Gather '$gather' is not defined."
+	[ $(declare -F "get_${gather}") ] && get_${gather} || echo "Gather '$v' is not defined."
 done
 
 # Preparing spacings
