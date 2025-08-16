@@ -18,15 +18,20 @@
 [ "$COLOR_VALUE" ] || COLOR_VALUE='0'
 
 ## Utils ##
-gen_spacing()
+util_makespaces()
 {
-	spacing=''; (( $1 > 0 )) && for i in $(seq 1 $1); do spacing+=' '; done; echo "$spacing"
+	spacing=''
+	for (( i=0; i < $1; i++ )) do 
+		spacing+=' '
+	done
+	echo "$spacing"
 }
-rm_colrseq()
+util_rm_ansicolor()
 {
 	echo -e "$1" | sed 's/\x1b\[[0-9;]*m//g'
 }
-_awk()
+# Typing $(awk <<< string) is too tedious
+util_awk()
 {
 	awk "$2" <<< "$1"
 }
@@ -50,34 +55,42 @@ get_kernel()
 }
 get_pkgs()
 {
-	for i in $( seq $((${#PKG_MANAGERS[@]} / 3)) ); do 
-		i=$(( 3 * (i - 1) ))
+	for (( i=0; i < (${#PKG_MANAGERS[@]} / 3); i++ )); do 
+		(( j=i*3 ))
 
-		label=${PKG_MANAGERS[i]}
-		cmd=${PKG_MANAGERS[i+1]}
-		opts=${PKG_MANAGERS[i+2]}
+		# Getting some stuff from the array
+		label=${PKG_MANAGERS[j]}
+		cmd=${PKG_MANAGERS[j+1]}
+		opts=${PKG_MANAGERS[j+2]}
+
 		[ $(which $cmd) ] && log "Pkgs ($label)" "$($cmd $opts | wc -l)"
 	done
 }
 get_colors()
 {
 	palette=''
-	for i in $(seq 0 7); do palette+="\e[4${i}m   "; done
+	for (( i=0; i <= 7; i++ )); do 
+		palette+="\e[4${i}m   "
+	done
 	log 'Colors' "$palette\e[m"
 }
-# Not sure how good is the implementation for these
+# Not sure how good are the implementations for these
 get_mounts()
 {
+	# Getting information about mounts with 'df'
 	info=$(df -hT -xtmpfs -xdevtmpfs -xefivarfs | awk 'NR>=2')
-	for i in $(seq 1 $(wc -l <<< "$info")); do
-		line=$(_awk "$info" "NR==$i")
 
-		dev=$(_awk "$line" '{print $1}')
-		size=$(_awk "$line" '{print $3}')
-		used=$(_awk "$line" '{print $4}')
-		perc=$(_awk "$line" '{print $6}')
-		type=$(_awk "$line" '{print $2}')
-		path=$(_awk "$line" '{print $7}')
+	# Looping through the $info
+	for (( i=1; i <= $(wc -l <<< "$info"); i++ )); do
+		line=$(util_awk "$info" "NR==$i")
+
+		dev=$(util_awk "$line" '{print $1}')
+		size=$(util_awk "$line" '{print $3}')
+		used=$(util_awk "$line" '{print $4}')
+		perc=$(util_awk "$line" '{print $6}')
+		type=$(util_awk "$line" '{print $2}')
+		path=$(util_awk "$line" '{print $7}')
+
 		log "Mount ($dev)" "$used / $size ($perc) $type; mounted on '$path'"
 	done
 }
@@ -85,21 +98,24 @@ get_mem()
 {
 	info=$(free --mebi | awk 'NR>=2')
 	# RAM
-	mem=$(_awk "$info" 'NR==1')
-	used=$(_awk "$mem" '{print $3}')
-	total=$(_awk "$mem" '{print $2}')
+	mem=$(util_awk "$info" 'NR==1')
+	used=$(util_awk "$mem" '{print $3}')
+	total=$(util_awk "$mem" '{print $2}')
 	log 'Memory' "$used / $total (MiB)"
+
 	# Swap
-	swp=$(_awk "$info" 'NR==2')
-	used=$(_awk "$swp" '{print $3}')
-	total=$(_awk "$swp" '{print $2}')
+	swp=$(util_awk "$info" 'NR==2')
+	used=$(util_awk "$swp" '{print $3}')
+	total=$(util_awk "$swp" '{print $2}')
 	if (( total > 0 )); then log 'Swap' "$used / $total (MiB)"; fi
 }
 get_bat()
 { 
 	for bat in $(find /sys/class/power_supply/BAT*); do
+		# Getting battery's capacity and its status (Discharging or Charging)
 		capacity=$(cat ${bat}/capacity)
 		status=$(cat ${bat}/status)
+
 		log "Battery ($(basename $bat))" "${capacity}% ($status)"
 	done
 }
@@ -108,47 +124,58 @@ get_bat()
 # Preparing $to_gather while checking options with the most awful method possible
 to_gather=$DEFAULT_GATHERS; new_gathers=''; append=0
 for v in ${@:1}; do
-	if [ $v == '+' ]; then append=1; else new_gathers+=" $v"; fi
+	if [ $v == '+' ]; then
+		append=1
+	else 
+		new_gathers+=" $v"
+	fi
 done
 (( $append )) && to_gather+=" $new_gathers" || if (( ${#new_gathers} > 0 )); then to_gather=$new_gathers; fi
 
 # Measuring the art
 artp_n=${#ART[@]}; art_width=0
-for i in $(seq 1 $artp_n); do
-	clr=$(rm_colrseq "${ART[i]}"); (( ${#clr} > art_width )) && art_width=${#clr}
+for (( i=0; i < artp_n; i++ )); do
+	clr=$(util_rm_ansicolor "${ART[i]}")
+	(( ${#clr} > art_width )) && art_width=${#clr}
 done
 
 # Something that will help us to line up all
-logs=(); key_maxwidth=0
+logs=(); key_longestwidth=0
 log()
 {
-	# Measuring key & comparing length then inserting key & value
-	(( ${#1} > key_maxwidth )) && key_maxwidth=${#1}; logs+=("$1" "$2")
+	# Trying to find longest width
+	(( ${#1} > key_longestwidth )) && key_longestwidth=${#1}
+
+	# Inserting key and value
+	logs+=("$1" "$2")
 }
 
 # Calling gathers
-for v in $to_gather; do
-	[ $(declare -F "get_${v}") ] && get_${v} || echo "Gather '$v' is not defined."
+for gather in $to_gather; do
+	[ $(declare -F "get_${gather}") ] && get_${gather} || echo "Gather '$v' is not defined."
 done
 
 # Preparing spacings
-init_spacing=$(gen_spacing $SPACE_FROM_START)
-art_spacing=$( (( artp_n > 0 )) && gen_spacing $SPACE_FROM_ART && echo )
-artend_spacing=$(gen_spacing $art_width)
-key_spacing=$(gen_spacing $SPACE_FROM_KEY)
-delimiter_spacing=$( (( ${#DELIMITER_CHAR} > 0 )) && gen_spacing $SPACE_FROM_DELIMITER)
+init_spacing=$(util_makespaces $SPACE_FROM_START)
+art_spacing=$( (( artp_n > 0 )) && util_makespaces $SPACE_FROM_ART && echo )
+artend_spacing=$(util_makespaces $art_width)
+key_spacing=$(util_makespaces $SPACE_FROM_KEY)
+delimiter_spacing=$( (( ${#DELIMITER_CHAR} > 0 )) && util_makespaces $SPACE_FROM_DELIMITER)
 
 # Outputing $logs
 log_i=0; artp_i=0
 while ! (( ( log_i >= ${#logs[@]} ) && ( artp_i >= artp_n ) )); do
-	# Initial space
+	# Initial spacing
 	echo -ne "$init_spacing"
 
 	# Art piece
 	if (( artp_n > artp_i )); then
 		artp=${ART[artp_i]}; (( artp_i++ ))
 
-		clr=$(rm_colrseq "$artp"); width_spacing=$(gen_spacing $(( art_width - ${#clr} )) )
+		# Getting rid of the ANSI Color to get width and correct it
+		clr=$(util_rm_ansicolor "$artp")
+		width_spacing=$(util_makespaces $(( art_width - ${#clr} )) )
+
 		echo -ne "$artp$width_spacing$art_spacing"
 	else
 		(( artp_n > 0 )) && echo -ne "$artend_spacing$art_spacing"
@@ -158,11 +185,14 @@ while ! (( ( log_i >= ${#logs[@]} ) && ( artp_i >= artp_n ) )); do
 	if (( ${#logs[@]} > log_i )); then
 		k=${logs[log_i]}; v=${logs[log_i+1]}; (( log_i+=2 ))
 
-		lineup_spacing=$(gen_spacing $(( key_maxwidth - ${#k} )))
+		# Spaces to lineup values
+		lineup_spacing=$(util_makespaces $(( key_longestwidth - ${#k} )))
+
 		(( ${#k} > 0 )) &&
 		echo -ne "\e[${COLOR_KEY}m${k}$lineup_spacing${key_spacing}\e[${COLOR_DELIMITER}m$DELIMITER_CHAR$delimiter_spacing\e[${COLOR_VALUE}m$v" ||
 		echo -ne "\e[${COLOR_VALUE}m$v"
 	fi
+
 	# New line & color reset
-	echo -e "\e[m"
+	echo -e "\e[0m"
 done

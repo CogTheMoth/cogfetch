@@ -5,7 +5,7 @@ Yet, yet another fetcher written in Bash.
 You are fine, as long you have these in your system:
 - bash
 - echo, cat
-- seq, awk, sed, wc
+- awk, sed, wc
 - find, which
 - df, free, uname, uptime, hostname, whoami, lsb_release
 
